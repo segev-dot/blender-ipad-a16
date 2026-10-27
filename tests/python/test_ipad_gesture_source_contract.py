@@ -30,6 +30,31 @@ class IpadGestureSourceContractTest(unittest.TestCase):
         ):
             self.assertTrue(token in source, f"missing native gesture token: {token}")
 
+        self.assertTrue(
+            "CGPoint translation = [sender getScaledTranslation:window];" in source,
+            "UserInputEvent requires a mutable translation pointer",
+        )
+        self.assertFalse(
+            "const CGPoint translation = [sender getScaledTranslation:window];" in source,
+            "three-finger translation must not be const",
+        )
+        self.assertTrue(
+            "CGPoint delta = [sender getRelativeTranslation:translation];" in source,
+            "UserInputEvent requires a mutable delta pointer",
+        )
+        self.assertFalse(
+            "const CGPoint delta = [sender getRelativeTranslation:translation];" in source,
+            "three-finger delta must not be const",
+        )
+        self.assertTrue(
+            "CGPoint point = [sender locationInView:window->getView()];" in source,
+            "scalePointToWindow requires a mutable CGPoint lvalue",
+        )
+        self.assertTrue(
+            "point = window->scalePointToWindow(point);" in source,
+            "long press must scale its mutable touch point before dispatch",
+        )
+
     def test_three_finger_navigation_is_tagged_and_pan_safe(self):
         event_source = (
             ROOT / "source/blender/windowmanager/intern/wm_event_system.cc"

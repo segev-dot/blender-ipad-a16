@@ -827,8 +827,8 @@ typedef struct UserInputEvent {
     [sender setCachedTranslation:[sender getScaledTranslation:window]];
   }
   else if (sender.state == UIGestureRecognizerStateChanged) {
-    const CGPoint translation = [sender getScaledTranslation:window];
-    const CGPoint delta = [sender getRelativeTranslation:translation];
+    CGPoint translation = [sender getScaledTranslation:window];
+    CGPoint delta = [sender getRelativeTranslation:translation];
     [sender setCachedTranslation:translation];
     if (!CGPointEqualToPoint(delta, CGPointMake(0.0f, 0.0f))) {
       const CGPoint point = [sender getScaledTouchPoint:window];
@@ -853,8 +853,8 @@ typedef struct UserInputEvent {
     return;
   }
 
-  const CGPoint point = window->scalePointToWindow(
-      [sender locationInView:window->getView()]);
+  CGPoint point = [sender locationInView:window->getView()];
+  point = window->scalePointToWindow(point);
   UserInputEvent event_info(&point, nullptr, nullptr, false);
   event_info.add_event(UserInputEvent::EventTypes::CURSOR_MOVE);
   event_info.add_event(UserInputEvent::EventTypes::RIGHT_BUTTON_DOWN);
