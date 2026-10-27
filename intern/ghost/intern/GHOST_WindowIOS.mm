@@ -48,9 +48,12 @@ typedef struct UserInputEvent {
     CURSOR_MOVE,
     PAN_GESTURE,
     PAN_GESTURE_TWO_FINGERS,
+    PAN_GESTURE_THREE_FINGERS,
     PINCH_GESTURE,
     LEFT_BUTTON_DOWN,
     LEFT_BUTTON_UP,
+    RIGHT_BUTTON_DOWN,
+    RIGHT_BUTTON_UP,
     PENCIL_TAP,
   };
   EventTypes event_list[10];
@@ -86,12 +89,18 @@ typedef struct UserInputEvent {
         return @"PAN";
       case PAN_GESTURE_TWO_FINGERS:
         return @"PAN2F";
+      case PAN_GESTURE_THREE_FINGERS:
+        return @"PAN3F";
       case PINCH_GESTURE:
         return @"PINCH";
       case LEFT_BUTTON_DOWN:
         return @"LB-DOWN";
       case LEFT_BUTTON_UP:
         return @"LB-UP";
+      case RIGHT_BUTTON_DOWN:
+        return @"RB-DOWN";
+      case RIGHT_BUTTON_UP:
+        return @"RB-UP";
       case PENCIL_TAP:
         return @"PENCIL-TAP";
     }
@@ -240,12 +249,13 @@ typedef struct UserInputEvent {
   GHOSTUITapGestureRecognizer *tap4f_gesture_recognizer;
   GHOSTUIPanGestureRecognizer *pan_gesture_recognizer;
   GHOSTUIPanGestureRecognizer *pan2f_gesture_recognizer;
+  GHOSTUIPanGestureRecognizer *pan3f_gesture_recognizer;
   GHOSTUIPinchGestureRecognizer *zoom_gesture_recognizer;
   GHOSTUIHoverGestureRecognizer *hover_gesture_recognizer;
   UIPencilInteraction *pencil_interaction;
   UIScreenEdgePanGestureRecognizer *edge_swipe_left;
   UIScreenEdgePanGestureRecognizer *edge_swipe_right;
-  // GHOSTUILongPressGestureRecognizer *long_press_gesture_recognizer;
+  UILongPressGestureRecognizer *long_press_gesture_recognizer;
 
   /* Data from the Apple pencil */
   UITouch *current_pencil_touch;
@@ -282,6 +292,8 @@ typedef struct UserInputEvent {
 - (void)handleTap:(GHOSTUITapGestureRecognizer *)sender;
 - (void)handlePan:(GHOSTUIPanGestureRecognizer *)sender;
 - (void)handlePan2f:(GHOSTUIPanGestureRecognizer *)sender;
+- (void)handlePan3f:(GHOSTUIPanGestureRecognizer *)sender;
+- (void)handleLongPress:(UILongPressGestureRecognizer *)sender;
 - (void)handleZoom:(GHOSTUIPinchGestureRecognizer *)sender;
 
 /* On screen keyboard handling */
@@ -403,6 +415,32 @@ typedef struct UserInputEvent {
   pan2f_gesture_recognizer.maximumNumberOfTouches = 2;
   [window->getView() addGestureRecognizer:pan2f_gesture_recognizer];
 
+  /* Three direct fingers pan the 3D view. The exact touch count keeps this
+   * separate from the existing two-finger orbit recognizer. */
+  pan3f_gesture_recognizer = [[GHOSTUIPanGestureRecognizer alloc]
+      initWithTarget:self
+              action:@selector(handlePan3f:)];
+  pan3f_gesture_recognizer.delegate = self;
+  pan3f_gesture_recognizer.cancelsTouchesInView = false;
+  pan3f_gesture_recognizer.minimumNumberOfTouches = 3;
+  pan3f_gesture_recognizer.maximumNumberOfTouches = 3;
+  pan3f_gesture_recognizer.allowedTouchTypes = @[ @(UITouchTypeDirect) ];
+  [window->getView() addGestureRecognizer:pan3f_gesture_recognizer];
+
+  /* A stationary direct finger for two seconds opens Blender's ordinary
+   * context menu. Keeping touches uncancelled preserves selection and Pencil
+   * input; a moving one-finger pan exceeds allowableMovement and fails. */
+  long_press_gesture_recognizer = [[UILongPressGestureRecognizer alloc]
+      initWithTarget:self
+              action:@selector(handleLongPress:)];
+  long_press_gesture_recognizer.delegate = self;
+  long_press_gesture_recognizer.minimumPressDuration = 2.0;
+  long_press_gesture_recognizer.numberOfTouchesRequired = 1;
+  long_press_gesture_recognizer.allowableMovement = 10.0;
+  long_press_gesture_recognizer.cancelsTouchesInView = false;
+  long_press_gesture_recognizer.allowedTouchTypes = @[ @(UITouchTypeDirect) ];
+  [window->getView() addGestureRecognizer:long_press_gesture_recognizer];
+
   /* Pinch/Zoom gesture recognizer. */
   zoom_gesture_recognizer = [[GHOSTUIPinchGestureRecognizer alloc]
       initWithTarget:self
@@ -490,6 +528,18 @@ typedef struct UserInputEvent {
                                       true,
                                       2));
           break;
+        case UserInputEvent::EventTypes::PAN_GESTURE_THREE_FINGERS:
+          system->pushEvent(
+              new GHOST_EventTrackpad(GHOST_GetMilliSeconds((GHOST_SystemHandle)system),
+                                      window,
+                                      GHOST_kTrackpadEventScroll,
+                                      event_info.location.x,
+                                      event_info.location.y,
+                                      event_info.translation.x,
+                                      event_info.translation.y,
+                                      true,
+                                      3));
+          break;
         case UserInputEvent::EventTypes::LEFT_BUTTON_DOWN:
           system->pushEvent(
               new GHOST_EventButton(GHOST_GetMilliSeconds((GHOST_SystemHandle)system),
@@ -505,6 +555,22 @@ typedef struct UserInputEvent {
                                     window,
                                     GHOST_kButtonMaskLeft,
                                     tablet_data));
+          break;
+        case UserInputEvent::EventTypes::RIGHT_BUTTON_DOWN:
+          system->pushEvent(
+              new GHOST_EventButton(GHOST_GetMilliSeconds((GHOST_SystemHandle)system),
+                                    GHOST_kEventButtonDown,
+                                    window,
+                                    GHOST_kButtonMaskRight,
+                                    GHOST_TABLET_DATA_NONE));
+          break;
+        case UserInputEvent::EventTypes::RIGHT_BUTTON_UP:
+          system->pushEvent(
+              new GHOST_EventButton(GHOST_GetMilliSeconds((GHOST_SystemHandle)system),
+                                    GHOST_kEventButtonUp,
+                                    window,
+                                    GHOST_kButtonMaskRight,
+                                    GHOST_TABLET_DATA_NONE));
           break;
         case UserInputEvent::EventTypes::PINCH_GESTURE:
           system->pushEvent(
@@ -752,6 +818,48 @@ typedef struct UserInputEvent {
     /* Set translation back to zero. */
     [sender setCachedTranslation:CGPointMake(0.0f, 0.0f)];
   }
+}
+
+/* Keep one-finger selection and two-finger orbit intact; three fingers pan. */
+- (void)handlePan3f:(GHOSTUIPanGestureRecognizer *)sender
+{
+  if (sender.state == UIGestureRecognizerStateBegan) {
+    [sender setCachedTranslation:[sender getScaledTranslation:window]];
+  }
+  else if (sender.state == UIGestureRecognizerStateChanged) {
+    const CGPoint translation = [sender getScaledTranslation:window];
+    const CGPoint delta = [sender getRelativeTranslation:translation];
+    [sender setCachedTranslation:translation];
+    if (!CGPointEqualToPoint(delta, CGPointMake(0.0f, 0.0f))) {
+      const CGPoint point = [sender getScaledTouchPoint:window];
+      UserInputEvent event_info(&point, &delta, nullptr, false);
+      event_info.add_event(UserInputEvent::EventTypes::PAN_GESTURE_THREE_FINGERS);
+      [self generateUserInputEvents:event_info];
+    }
+  }
+  else if (sender.state == UIGestureRecognizerStateEnded ||
+           sender.state == UIGestureRecognizerStateCancelled ||
+           sender.state == UIGestureRecognizerStateFailed)
+  {
+    [sender setCachedTranslation:CGPointMake(0.0f, 0.0f)];
+  }
+}
+
+/* Emit both right-button states through the serialized input queue, so the
+ * long press cannot leave Blender with a stuck context-click button. */
+- (void)handleLongPress:(UILongPressGestureRecognizer *)sender
+{
+  if (sender.state != UIGestureRecognizerStateBegan) {
+    return;
+  }
+
+  const CGPoint point = window->scalePointToWindow(
+      [sender locationInView:window->getView()]);
+  UserInputEvent event_info(&point, nullptr, nullptr, false);
+  event_info.add_event(UserInputEvent::EventTypes::CURSOR_MOVE);
+  event_info.add_event(UserInputEvent::EventTypes::RIGHT_BUTTON_DOWN);
+  event_info.add_event(UserInputEvent::EventTypes::RIGHT_BUTTON_UP);
+  [self generateUserInputEvents:event_info];
 }
 
 - (void)handleEdgeSwipe:(UIScreenEdgePanGestureRecognizer *)gesture

@@ -46,6 +46,10 @@ class TOUCHVIEW_OT_right_click_action(Operator):
         return context.area.type in {"VIEW_2D", "VIEW_3D"} and context.region.type == "WINDOW"
 
     def invoke(self, context, event):
+        # Native iPad long-press emits an ordinary right-button click. Do not
+        # consume it here: Blender must receive it to open its context menu.
+        if sys.platform == "ios":
+            return PASSTHROUGH
         prefs = preferences()
         if prefs.right_click_source == "NONE":
             return PASSTHROUGH

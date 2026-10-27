@@ -5784,7 +5784,9 @@ static wmEvent *wm_event_add_trackpad(wmWindow *win, const wmEvent *event, int d
   /* Ignore in between trackpad events for performance, we only need high accuracy
    * for painting with mouse moves, for navigation using the accumulated value is ok. */
   const wmEvent *event_last = static_cast<wmEvent *>(win->runtime->event_queue.last);
-  if (event_last && event_last->type == event->type) {
+  if (event_last && event_last->type == event->type &&
+      event_last->flag == event->flag && event_last->modifier == event->modifier)
+  {
     deltax += event_last->xy[0] - event_last->prev_xy[0];
     deltay += event_last->xy[1] - event_last->prev_xy[1];
 
@@ -6065,6 +6067,11 @@ void wm_event_add_ghostevent(wmWindowManager *wm,
       }
       else if (pd->numFingers == 3) {
         event.flag |= WM_EVENT_MULTITOUCH_THREE_FINGERS;
+#  ifdef WITH_APPLE_CROSSPLATFORM
+        /* The standard Blender keymap maps Shift + trackpad pan to Pan View.
+         * This modifier belongs to the event only and never changes keyboard state. */
+        event.modifier |= KM_SHIFT;
+#  endif
       }
 #if !defined(WIN32) && !defined(__APPLE__)
       /* Ensure "auto" is used when supported. */

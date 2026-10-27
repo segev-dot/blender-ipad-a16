@@ -107,7 +107,9 @@ static wmOperatorStatus viewmove_invoke(bContext *C, wmOperator *op, const wmEve
 {
 #ifdef WITH_APPLE_CROSSPLATFORM
   /* Only handle inverted events for 3D view interaction on iOS */
-  if (!(event->flag & WM_EVENT_MULTITOUCH_TWO_FINGERS)) {
+  if (!(event->flag &
+        (WM_EVENT_MULTITOUCH_TWO_FINGERS | WM_EVENT_MULTITOUCH_THREE_FINGERS)))
+  {
     return OPERATOR_FINISHED;
   }
 #endif
