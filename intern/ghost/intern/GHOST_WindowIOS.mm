@@ -831,7 +831,7 @@ typedef struct UserInputEvent {
     CGPoint delta = [sender getRelativeTranslation:translation];
     [sender setCachedTranslation:translation];
     if (!CGPointEqualToPoint(delta, CGPointMake(0.0f, 0.0f))) {
-      const CGPoint point = [sender getScaledTouchPoint:window];
+      CGPoint point = [sender getScaledTouchPoint:window];
       UserInputEvent event_info(&point, &delta, nullptr, false);
       event_info.add_event(UserInputEvent::EventTypes::PAN_GESTURE_THREE_FINGERS);
       [self generateUserInputEvents:event_info];

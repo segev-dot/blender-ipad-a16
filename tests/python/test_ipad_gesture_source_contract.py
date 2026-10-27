@@ -54,6 +54,14 @@ class IpadGestureSourceContractTest(unittest.TestCase):
             "point = window->scalePointToWindow(point);" in source,
             "long press must scale its mutable touch point before dispatch",
         )
+        self.assertTrue(
+            "CGPoint point = [sender getScaledTouchPoint:window];" in source,
+            "three-finger pan must pass a mutable touch point to UserInputEvent",
+        )
+        self.assertFalse(
+            "const CGPoint point = [sender getScaledTouchPoint:window];" in source,
+            "three-finger pan cannot pass a const touch point to UserInputEvent",
+        )
 
     def test_three_finger_navigation_is_tagged_and_pan_safe(self):
         event_source = (
